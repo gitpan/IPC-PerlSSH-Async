@@ -1,0 +1,10 @@
+Build.PL
+Changes
+lib/IPC/PerlSSH/Async.pm
+MANIFEST			This list of files
+t/00use.t
+t/01perltest.t
+t/10library-load.t
+t/Math.pm
+Makefile.PL
+META.yml
