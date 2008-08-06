@@ -1,6 +1,6 @@
 ---
 name: IPC-PerlSSH-Async
-version: 0.01
+version: 0.02
 author:
   - 'Paul Evans E<lt>leonerd@leonerd.org.ukE<gt>'
 abstract: 'Asynchronous wrapper around L<IPC::PerlSSH>'
@@ -17,7 +17,7 @@ build_requires:
 provides:
   IPC::PerlSSH::Async:
     file: lib/IPC/PerlSSH/Async.pm
-    version: 0.01
+    version: 0.02
 generated_by: Module::Build version 0.280801
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.2.html
