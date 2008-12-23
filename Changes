@@ -1,5 +1,8 @@
 Revision history for IPC-PerlSSH-Async
 
+0.03    BUGFIXES:
+         * Ensure that large calls/returns (over 8192 bytes) work correctly
+
 0.02    CHANGES:
          * Wrote POD documentation
 

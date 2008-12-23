@@ -5,7 +5,7 @@ WriteMakefile
           'NAME' => 'IPC::PerlSSH::Async',
           'VERSION_FROM' => 'lib/IPC/PerlSSH/Async.pm',
           'PREREQ_PM' => {
-                           'IO::Async' => 0,
+                           'IO::Async' => '0.16',
                            'IO::Async::Test' => 0,
                            'IPC::PerlSSH::Base' => 0,
                            'Test::More' => 0,

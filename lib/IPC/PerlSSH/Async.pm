@@ -10,7 +10,7 @@ use base qw( IPC::PerlSSH::Base );
 
 use IO::Async::Stream;
 
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 
 use Carp;
 
@@ -20,10 +20,10 @@ C<IPC::PerlSSH::Async> - Asynchronous wrapper around L<IPC::PerlSSH>
 
 =head1 SYNOPSIS
 
- use IO::Async::Loop::IO_Poll;
+ use IO::Async::Loop;
  use IPC::PerlSSH::Async;
 
- my $loop = IO::Async::Loop::IO_Poll->new();
+ my $loop = IO::Async::Loop->new();
 
  my $ips = IPC::PerlSSH::Async->new(
     loop => $loop,
@@ -183,7 +183,8 @@ sub new
 
          return 0 if $closed;
 
-         return 0 unless my ( $message, @args ) = $class->parse_message( $$buffref );
+         my ( $message, @args ) = $class->parse_message( $$buffref );
+         return 0 unless defined $message;
 
          my $cb = shift @messagequeue;
          $cb->( $message, @args );
@@ -292,7 +293,7 @@ sub eval
 
          if( $ret eq "RETURNED" ) { $on_result->( @args ); }
          elsif( $ret eq "DIED" )  { $on_exception->( $args[0] ); }
-         else                     { carp "Unknown return result $ret"; }
+         else                     { warn "Unknown return result $ret"; }
       },
    );
 }
@@ -356,7 +357,7 @@ sub store
 
          if( $ret eq "OK" )      { $on_stored->(); }
          elsif( $ret eq "DIED" ) { $on_exception->( $args[0] ); }
-         else                    { carp "Unknown return result $ret"; }
+         else                    { warn "Unknown return result $ret"; }
       },
    );
 }
@@ -414,7 +415,7 @@ sub call
 
          if( $ret eq "RETURNED" ) { $on_result->( @args ); }
          elsif( $ret eq "DIED" )  { $on_exception->( $args[0] ); }
-         else                     { carp "Unknown return result $ret"; }
+         else                     { warn "Unknown return result $ret"; }
       },
    );
 }

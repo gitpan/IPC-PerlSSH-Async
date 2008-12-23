@@ -7,7 +7,7 @@ my $build = Module::Build->new
   (
    module_name => 'IPC::PerlSSH::Async',
    requires => {
-                 'IO::Async' => 0,
+                 'IO::Async'          => '0.16',
                  'IPC::PerlSSH::Base' => 0,
    },
    build_requires => {

@@ -5,11 +5,11 @@ use strict;
 use Test::More tests => 7;
 use Test::Refcount;
 use IO::Async::Test;
-use IO::Async::Loop::IO_Poll;
+use IO::Async::Loop;
 
 use IPC::PerlSSH::Async;
 
-my $loop = IO::Async::Loop::IO_Poll->new();
+my $loop = IO::Async::Loop->new();
 testing_loop( $loop );
 
 my $ips = IPC::PerlSSH::Async->new(
