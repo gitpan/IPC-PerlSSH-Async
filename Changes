@@ -1,5 +1,11 @@
 Revision history for IPC-PerlSSH-Async
 
+0.04    CHANGES:
+         * 'use warnings'
+         * Added an example - collect the current time across multiple hosts
+         * Adjusted for IO::Async version 0.21 - implement as a real 
+           IO::Async::Stream, complete with ->configure method.
+
 0.03    BUGFIXES:
          * Ensure that large calls/returns (over 8192 bytes) work correctly
 

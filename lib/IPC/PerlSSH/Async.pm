@@ -6,11 +6,12 @@
 package IPC::PerlSSH::Async;
 
 use strict;
-use base qw( IPC::PerlSSH::Base );
+use warnings;
+use base qw( IO::Async::Stream IPC::PerlSSH::Base );
 
 use IO::Async::Stream;
 
-our $VERSION = '0.03';
+our $VERSION = '0.04';
 
 use Carp;
 
@@ -20,17 +21,20 @@ C<IPC::PerlSSH::Async> - Asynchronous wrapper around L<IPC::PerlSSH>
 
 =head1 SYNOPSIS
 
+I<Note:> the constructor has changed since version 0.03.
+
  use IO::Async::Loop;
  use IPC::PerlSSH::Async;
 
  my $loop = IO::Async::Loop->new();
 
  my $ips = IPC::PerlSSH::Async->new(
-    loop => $loop,
     on_exception => sub { die "Failed - $_[0]\n" },
 
     Host => "over.there",
  );
+
+ $loop->add( $ips );
 
  $ips->eval(
     code => "use POSIX qw( uname ); uname()",
@@ -73,42 +77,14 @@ detail, see the L<IPC::PerlSSH> documentation.
 
 =cut
 
-=head1 CONSTRUCTOR
-
-=cut
-
-=head2 $ips = IPC::PerlSSH::Async->new( %args )
-
-This function returns a new instance of a C<IPC::PerlSSH::Async> object. The
-C<%args> hash takes the following keys:
-
-=over 8
-
-=item loop => IO::Async::Loop
-
-The containing C<IO::Async::Loop> object.
-
-=item on_exception => CODE
-
-Optional. A default callback to use if a call to C<eval()>, C<store()> or
-C<call()> does not provide one.
-
-=back
+=head1 INITIAL PARAMETERS
 
 In order to specify the type of connection to be used, exactly one of the
-following sets of keys should be passed
+following sets of keys should be passed to C<new>:
 
 =over 8
 
-=item read_handle => IO
-
-=item write_handle => IO
-
-IO handles.
-
-=item Command => STRING|ARRAY
-
-A string or ARRAY reference containing arguments to be exec()ed
+=head2 SSH Connection
 
 =item Host => STRING
 
@@ -122,6 +98,36 @@ SSH to the given hostname, as the optionally given username. C<SshPath> and
 C<Perl> are optional strings to give the local path to the F<ssh> binary, and
 the remote path to the remote F<perl> respectively.
 
+=head2 Arbitrary Command
+
+=item Command => STRING|ARRAY
+
+A string or ARRAY reference containing arguments to be exec()ed
+
+=head2 Direct IO Handles
+
+=item read_handle => IO
+
+=item write_handle => IO
+
+IO handles.
+
+=back
+
+=head1 PARAMETERS
+
+The following named parameters may be passed to C<new> or C<configure>:
+
+=over 8
+
+=item on_exception => CODE
+
+Optional. A default callback to use if a call to C<eval()>, C<store()> or
+C<call()> does not provide one. If it is changed while a result it
+outstanding, the handler that was in place at the time it was invoked will be
+used in case of errors. Changes will only affect new C<eval()>, C<store()> or
+C<call()> calls made after the change.
+
 =back
 
 =cut
@@ -131,27 +137,59 @@ sub new
    my $class = shift;
    my %args = @_;
 
-   my $loop = delete $args{loop} or croak "Need a 'loop'";
+   my $loop = delete $args{loop};
 
-   !$args{on_exception} or ref $args{on_exception} eq "CODE"
-      or croak "Expected 'on_exception' to be a CODE reference";
+   my $self = $class->SUPER::new( %args );
 
-   my @messagequeue;
+   $loop->add( $self ) if $loop;
 
-   my $self = bless {
-      on_message_queue => \@messagequeue,
-      loop => $loop,
-      on_exception => $args{on_exception},
-   }, $class;
+   return $self;
+}
+
+sub _init
+{
+   my $self = shift;
+   my ( $params ) = @_;
+
+   foreach (qw( read_handle write_handle Command Host User SshPath Perl )) {
+      $self->{init_args}{$_} = delete $params->{$_} if exists $params->{$_};
+   }
+
+   return $self->SUPER::_init( $params );
+}
+
+sub configure
+{
+   my $self = shift;
+   my %params = @_;
+
+   if( exists $params{on_exception} ) {
+      my $on_exception = delete $params{on_exception};
+      !$on_exception or ref $on_exception eq "CODE"
+         or croak "Expected 'on_exception' to be a CODE reference";
+
+      $self->{on_exception} =  $on_exception;
+   }
+
+   $self->SUPER::configure( %params );
+}
+
+sub _add_to_loop
+{
+   my $self = shift;
+   my $class = ref $self;
+   my ( $loop ) = @_;
 
    my ( $read_handle, $write_handle );
 
-   if( $args{read_handle} and $args{write_handle} ) {
-      $read_handle  = $args{read_handle};
-      $write_handle = $args{write_handle};
+   my $params = delete $self->{init_args} or return; # Already done it
+
+   if( $params->{read_handle} and $params->{write_handle} ) {
+      $read_handle  = $params->{read_handle};
+      $write_handle = $params->{write_handle};
    }
    else {
-      my @command = $self->build_command( %args );
+      my @command = $self->build_command( %$params );
 
       # TODO: IO::Async ought to have nice ways to do this
       pipe( $read_handle, my $childwr  ) or croak "Unable to pipe() - $!";
@@ -174,38 +212,30 @@ sub new
       $self->{pid} = $pid;
    }
 
-   $self->{stream} = IO::Async::Stream->new(
+   $self->{message_queue} = [];
+
+   $self->configure(
       read_handle  => $read_handle,
       write_handle => $write_handle,
-
-      on_read => sub {
-         my ( $stream, $buffref, $closed ) = @_;
-
-         return 0 if $closed;
-
-         my ( $message, @args ) = $class->parse_message( $$buffref );
-         return 0 unless defined $message;
-
-         my $cb = shift @messagequeue;
-         $cb->( $message, @args );
-
-         return 1;
-      },
    );
 
    $self->send_firmware;
-
-   $loop->add( $self->{stream} );
-
-   return $self;
 }
 
-sub write
+sub on_read
 {
    my $self = shift;
-   my ( $data ) = @_;
+   my ( $buffref, $closed ) = @_;
 
-   $self->{stream}->write( $data );
+   return 0 if $closed;
+
+   my ( $message, @args ) = $self->parse_message( $$buffref );
+   return 0 unless defined $message;
+
+   my $cb = shift @{ $self->{message_queue} };
+   $cb->( $message, @args );
+
+   return 1;
 }
 
 sub do_message
@@ -221,7 +251,7 @@ sub do_message
 
    $self->write_message( $message, @$args );
 
-   push @{ $self->{on_message_queue} }, $on_response;
+   push @{ $self->{message_queue} }, $on_response;
 }
 
 =head1 METHODS
@@ -502,7 +532,8 @@ sub DESTROY
 {
    my $self = shift;
 
-   $self->{stream}->close;
+   # Be safe at global destruction time
+   $self->{stream}->close if defined $self->{stream};
 }
 
 # Keep perl happy; keep Britain tidy

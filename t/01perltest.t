@@ -13,7 +13,6 @@ my $loop = IO::Async::Loop->new();
 testing_loop( $loop );
 
 my $ips = IPC::PerlSSH::Async->new(
-   loop => $loop,
    Command => "$^X",
 
    on_exception => sub { die "Perl died early - $_[0]" },
@@ -22,6 +21,8 @@ my $ips = IPC::PerlSSH::Async->new(
 ok( defined $ips, "Constructor" );
 
 is_oneref( $ips, '$ips has 1 refcount' );
+
+$loop->add( $ips );
 
 # Test basic eval / return
 my $result;
@@ -83,5 +84,7 @@ $ips->call(
 wait_for { defined $total };
 
 is( $total, 150, "Stored procedure storing/invokation" );
+
+$loop->remove( $ips );
 
 is_oneref( $ips, '$ips has 1 refcount at EOF' );

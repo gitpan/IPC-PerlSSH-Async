@@ -13,15 +13,16 @@ my $loop = IO::Async::Loop->new();
 testing_loop( $loop );
 
 my $ips = IPC::PerlSSH::Async->new(
-   loop => $loop,
    Command => "$^X",
 
    on_exception => sub { die "Perl died early - $_[0]" },
 );
 
+$loop->add( $ips );
+
 my $loaded;
 
-is_oneref( $ips, '$ips has 1 refcount before use_library' );
+is_refcount( $ips, 2, '$ips has 2 refcount before use_library' );
 
 $ips->use_library(
    library => "t::Math",
@@ -31,7 +32,7 @@ $ips->use_library(
 
 wait_for { $loaded };
 
-is_oneref( $ips, '$ips has 1 refcount after library loaded' );
+is_refcount( $ips, 2, '$ips has 2 refcount after library loaded' );
 
 my $total;
 $ips->call(
@@ -80,5 +81,7 @@ wait_for { $exception };
 like( $exception,
       qr/^Cannot find an IPC::PerlSSH library called a::library::that::does::not::exist /,
       'Loading a missing library fails' );
+
+$loop->remove( $ips );
 
 is_oneref( $ips, '$ips has 1 refcount at EOF' );
