@@ -11,7 +11,7 @@ use base qw( IO::Async::Stream IPC::PerlSSH::Base );
 
 use IO::Async::Stream;
 
-our $VERSION = '0.04';
+our $VERSION = '0.05';
 
 use Carp;
 
@@ -82,9 +82,9 @@ detail, see the L<IPC::PerlSSH> documentation.
 In order to specify the type of connection to be used, exactly one of the
 following sets of keys should be passed to C<new>:
 
-=over 8
-
 =head2 SSH Connection
+
+=over 8
 
 =item Host => STRING
 
@@ -98,13 +98,21 @@ SSH to the given hostname, as the optionally given username. C<SshPath> and
 C<Perl> are optional strings to give the local path to the F<ssh> binary, and
 the remote path to the remote F<perl> respectively.
 
+=back
+
 =head2 Arbitrary Command
+
+=over 8
 
 =item Command => STRING|ARRAY
 
 A string or ARRAY reference containing arguments to be exec()ed
 
+=back
+
 =head2 Direct IO Handles
+
+=over 8
 
 =item read_handle => IO
 
@@ -378,6 +386,8 @@ sub store
    my $on_exception = $args{on_exception} || $self->{on_exception};
    ref $on_exception eq "CODE" or croak "Expected 'on_exception' as a CODE reference";
 
+   $self->_has_stored_code( $name ) and return $on_exception->( "Already have a stored function called '$name'" );
+
    $self->do_message(
       message => "STORE",
       args    => [ $name, $code ],
@@ -385,11 +395,21 @@ sub store
       on_response => sub {
          my ( $ret, @args ) = @_;
 
-         if( $ret eq "OK" )      { $on_stored->(); }
+         if( $ret eq "OK" ) {
+            $self->{stored}{$name} = 1;
+            $on_stored->();
+         }
          elsif( $ret eq "DIED" ) { $on_exception->( $args[0] ); }
          else                    { warn "Unknown return result $ret"; }
       },
    );
+}
+
+sub _has_stored_code
+{
+   my $self = shift;
+   my ( $name ) = @_;
+   return exists $self->{stored}{$name};
 }
 
 =head2 $ips->call( %args )
@@ -435,6 +455,8 @@ sub call
 
    my $on_exception = $args{on_exception} || $self->{on_exception};
    ref $on_exception eq "CODE" or croak "Expected 'on_exception' as a CODE reference";
+
+   $self->_has_stored_code( $name ) or return $on_exception->( "Do not have a stored function called '$name'" );
 
    $self->do_message(
       message => "CALL",
@@ -502,30 +524,30 @@ sub use_library
    my $on_exception = $args{on_exception} || $self->{on_exception};
    ref $on_exception eq "CODE" or croak "Expected 'on_exception' as a CODE reference";
 
-   my %funcs = eval { $self->load_library( $library, $funcs ? @$funcs : () ) };
+   my ( $package, $funcshash ) = eval { $self->load_library_pkg( $library, $funcs ? @$funcs : () ) };
    if( $@ ) {
       $on_exception->( $@ );
       return;
    }
 
-   my $iter; $iter = sub {
-      if( !%funcs ) {
-         undef $iter; # Avoid circular ref which would otherwise hold $self
-         goto &$on_loaded;
-      }
+   $self->{stored_pkg}{$package} and delete $funcshash->{_init};
 
-      my ( $name ) = ( keys %funcs ); # Just take one
-      my $code = delete $funcs{$name};
+   $self->do_message(
+      message => "STOREPKG",
+      args    => [ $package, %$funcshash ],
 
-      $self->store(
-         name => $name,
-         code => $code,
-         on_stored => $iter,
-         on_exception => sub { undef $iter; goto &$on_exception },
-      );
-   };
+      on_response => sub {
+         my ( $ret, @args ) = @_;
 
-   $iter->();
+         if( $ret eq "OK" ) {
+            $self->{stored_pkg}{$package} = 1;
+            $self->{stored}{$_} = 1 for keys %$funcshash;
+            $on_loaded->();
+         }
+         elsif( $ret eq "DIED" ) { $on_exception->( $args[0] ); }
+         else                    { warn "Unknown return result $ret"; }
+      },
+   );
 }
 
 sub DESTROY
@@ -543,4 +565,4 @@ __END__
 
 =head1 AUTHOR
 
-Paul Evans E<lt>leonerd@leonerd.org.ukE<gt>
+Paul Evans <leonerd@leonerd.org.uk>

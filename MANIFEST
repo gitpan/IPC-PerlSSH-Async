@@ -11,3 +11,5 @@ t/02bigeval.t
 t/03legacy-loop.t
 t/10library-load.t
 t/Math.pm
+README
+LICENSE

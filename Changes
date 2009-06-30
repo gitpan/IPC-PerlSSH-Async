@@ -1,5 +1,9 @@
 Revision history for IPC-PerlSSH-Async
 
+0.05    CHANGES:
+         * Updated for IPC::PerlSSH 0.11 - STOREPKG, stored procedure tracking
+         * Fix POD errors
+
 0.04    CHANGES:
          * 'use warnings'
          * Added an example - collect the current time across multiple hosts
