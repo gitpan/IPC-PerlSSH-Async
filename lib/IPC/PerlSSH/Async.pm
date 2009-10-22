@@ -11,7 +11,7 @@ use base qw( IO::Async::Stream IPC::PerlSSH::Base );
 
 use IO::Async::Stream;
 
-our $VERSION = '0.05';
+our $VERSION = '0.06';
 
 use Carp;
 
@@ -136,6 +136,11 @@ outstanding, the handler that was in place at the time it was invoked will be
 used in case of errors. Changes will only affect new C<eval()>, C<store()> or
 C<call()> calls made after the change.
 
+=item on_exit => CODE
+
+Optional. A callback to invoke if the remote perl process exits. Will be
+passed directly to the C<IO::Async::Loop> C<spawn_child> method.
+
 =back
 
 =cut
@@ -179,6 +184,14 @@ sub configure
       $self->{on_exception} =  $on_exception;
    }
 
+   if( exists $params{on_exit} ) {
+      my $on_exit = delete $params{on_exit};
+      !$on_exit or ref $on_exit eq "CODE"
+         or croak "Expected 'on_exit' to be a CODE reference";
+
+      $self->{on_exit} =  $on_exit;
+   }
+
    $self->SUPER::configure( %params );
 }
 
@@ -191,6 +204,10 @@ sub _add_to_loop
    my ( $read_handle, $write_handle );
 
    my $params = delete $self->{init_args} or return; # Already done it
+
+   my $on_exit = $self->{on_exit} || sub {
+      print STDERR "Remote SSH died early";
+   };
 
    if( $params->{read_handle} and $params->{write_handle} ) {
       $read_handle  = $params->{read_handle};
@@ -209,9 +226,7 @@ sub _add_to_loop
             stdin  => $childrd,
             stdout => $childwr,
          ],
-         on_exit => sub {
-            print STDERR "Remote SSH died early";
-         },
+         on_exit => $on_exit,
       );
 
       close( $childrd );
@@ -235,7 +250,12 @@ sub on_read
    my $self = shift;
    my ( $buffref, $closed ) = @_;
 
-   return 0 if $closed;
+   if( $closed ) {
+      while( my $cb = shift @{ $self->{message_queue} } ) {
+         $cb->( "CLOSED" );
+      }
+      return 0;
+   }
 
    my ( $message, @args ) = $self->parse_message( $$buffref );
    return 0 unless defined $message;
@@ -304,7 +324,8 @@ L<Storable>, which can serialise the structure into a plain string, to be
 deserialised on the remote end.
 
 If the remote code threw an exception, then this function propagates it as a
-plain string.
+plain string. If the remote process exits before responding, this will be
+propagated as an exception.
 
 =cut
 
@@ -329,9 +350,10 @@ sub eval
       on_response => sub {
          my ( $ret, @args ) = @_;
 
-         if( $ret eq "RETURNED" ) { $on_result->( @args ); }
-         elsif( $ret eq "DIED" )  { $on_exception->( $args[0] ); }
-         else                     { warn "Unknown return result $ret"; }
+         if( $ret eq "RETURNED" )  { $on_result->( @args ); }
+         elsif( $ret eq "DIED" )   { $on_exception->( $args[0] ); }
+         elsif( $ret eq "CLOSED" ) { $on_exception->( "Remote connection closed" ); }
+         else                      { warn "Unknown return result $ret"; }
       },
    );
 }
@@ -368,7 +390,8 @@ called by the C<call> method.
 
 While the code is not executed, it will still be compiled into a CODE
 reference in the remote host. Any compile errors that occur will still invoke
-the C<on_exception> continuation.
+the C<on_exception> continuation. If the remote process exits before
+responding, this will be propagated as an exception.
 
 =cut
 
@@ -399,8 +422,9 @@ sub store
             $self->{stored}{$name} = 1;
             $on_stored->();
          }
-         elsif( $ret eq "DIED" ) { $on_exception->( $args[0] ); }
-         else                    { warn "Unknown return result $ret"; }
+         elsif( $ret eq "DIED" )   { $on_exception->( $args[0] ); }
+         elsif( $ret eq "CLOSED" ) { $on_exception->( "Remote connection closed" ); }
+         else                      { warn "Unknown return result $ret"; }
       },
    );
 }
@@ -436,7 +460,7 @@ Continuation to invoke when the code returns a result.
 
 =item on_exception => CODE
 
-Optional. Continuation to invoke if the code throws an exception.
+Optional. Continuation to invoke if the code throws an exception or exits.
 
 =back
 
@@ -465,9 +489,10 @@ sub call
       on_response => sub {
          my ( $ret, @args ) = @_;
 
-         if( $ret eq "RETURNED" ) { $on_result->( @args ); }
-         elsif( $ret eq "DIED" )  { $on_exception->( $args[0] ); }
-         else                     { warn "Unknown return result $ret"; }
+         if( $ret eq "RETURNED" )  { $on_result->( @args ); }
+         elsif( $ret eq "DIED" )   { $on_exception->( $args[0] ); }
+         elsif( $ret eq "CLOSED" ) { $on_exception->( "Remote connection closed" ); }
+         else                      { warn "Unknown return result $ret"; }
       },
    );
 }
@@ -495,7 +520,8 @@ Continuation to invoke when all the functions are stored.
 
 =item on_exception => CODE
 
-Optional. Continuation to invoke if storing a function throws an exception.
+Optional. Continuation to invoke if storing a function throws an exception or
+exits.
 
 =back
 
@@ -544,8 +570,9 @@ sub use_library
             $self->{stored}{$_} = 1 for keys %$funcshash;
             $on_loaded->();
          }
-         elsif( $ret eq "DIED" ) { $on_exception->( $args[0] ); }
-         else                    { warn "Unknown return result $ret"; }
+         elsif( $ret eq "DIED" )   { $on_exception->( $args[0] ); }
+         elsif( $ret eq "CLOSED" ) { $on_exception->( "Remote connection closed" ); }
+         else                      { warn "Unknown return result $ret"; }
       },
    );
 }

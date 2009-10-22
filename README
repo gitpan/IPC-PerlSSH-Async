@@ -89,6 +89,11 @@ PARAMETERS
             will only affect new "eval()", "store()" or "call()" calls made
             after the change.
 
+    on_exit => CODE
+            Optional. A callback to invoke if the remote perl process exits.
+            Will be passed directly to the "IO::Async::Loop" "spawn_child"
+            method.
+
 METHODS
   $ips->eval( %args )
     This method evaluates code in the remote host, passing arguments and
@@ -123,7 +128,8 @@ METHODS
     be deserialised on the remote end.
 
     If the remote code threw an exception, then this function propagates it
-    as a plain string.
+    as a plain string. If the remote process exits before responding, this
+    will be propagated as an exception.
 
   $ips->store( %args )
     This method sends code to the remote host to store in a named procedure
@@ -150,7 +156,8 @@ METHODS
 
     While the code is not executed, it will still be compiled into a CODE
     reference in the remote host. Any compile errors that occur will still
-    invoke the "on_exception" continuation.
+    invoke the "on_exception" continuation. If the remote process exits
+    before responding, this will be propagated as an exception.
 
   $ips->call( %args )
     This method invokes a stored procedure that has earlier been defined
@@ -170,8 +177,8 @@ METHODS
             Continuation to invoke when the code returns a result.
 
     on_exception => CODE
-            Optional. Continuation to invoke if the code throws an
-            exception.
+            Optional. Continuation to invoke if the code throws an exception
+            or exits.
 
   $ips->use_library( %args )
     This method loads a library of code from a module, and stores them to
@@ -191,7 +198,7 @@ METHODS
 
     on_exception => CODE
             Optional. Continuation to invoke if storing a function throws an
-            exception.
+            exception or exits.
 
     The library name may be a full class name, or a name within the
     "IPC::PerlSSH::Library::" space.

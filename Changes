@@ -1,5 +1,9 @@
 Revision history for IPC-PerlSSH-Async
 
+0.06    CHANGES:
+         * More graceful handling of remote perl exit()
+         * Added Test::Pod testing
+
 0.05    CHANGES:
          * Updated for IPC::PerlSSH 0.11 - STOREPKG, stored procedure tracking
          * Fix POD errors
