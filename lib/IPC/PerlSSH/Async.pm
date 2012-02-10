@@ -1,17 +1,18 @@
 #  You may distribute under the terms of either the GNU General Public License
 #  or the Artistic License (the same terms as Perl itself)
 #
-#  (C) Paul Evans, 2008 -- leonerd@leonerd.org.uk
+#  (C) Paul Evans, 2008-2012 -- leonerd@leonerd.org.uk
 
 package IPC::PerlSSH::Async;
 
 use strict;
 use warnings;
-use base qw( IO::Async::Stream IPC::PerlSSH::Base );
+use base qw( IO::Async::Notifier IPC::PerlSSH::Base );
+IPC::PerlSSH::Base->VERSION( '0.16' );
 
-use IO::Async::Stream;
+use IO::Async::Process 0.37;
 
-our $VERSION = '0.06';
+our $VERSION = '0.07';
 
 use Carp;
 
@@ -79,48 +80,10 @@ detail, see the L<IPC::PerlSSH> documentation.
 
 =head1 INITIAL PARAMETERS
 
-In order to specify the type of connection to be used, exactly one of the
-following sets of keys should be passed to C<new>:
+As well as the L</PARAMETERS> named below, the constructor will take any of
+the constructor arguments named by L<IPC::PerlSSH>, to set up the connection.
 
-=head2 SSH Connection
-
-=over 8
-
-=item Host => STRING
-
-=item User => STRING (optional)
-
-=item SshPath => STRING (optional)
-
-=item Perl => STRING (optional)
-
-SSH to the given hostname, as the optionally given username. C<SshPath> and
-C<Perl> are optional strings to give the local path to the F<ssh> binary, and
-the remote path to the remote F<perl> respectively.
-
-=back
-
-=head2 Arbitrary Command
-
-=over 8
-
-=item Command => STRING|ARRAY
-
-A string or ARRAY reference containing arguments to be exec()ed
-
-=back
-
-=head2 Direct IO Handles
-
-=over 8
-
-=item read_handle => IO
-
-=item write_handle => IO
-
-IO handles.
-
-=back
+=cut
 
 =head1 PARAMETERS
 
@@ -139,7 +102,7 @@ C<call()> calls made after the change.
 =item on_exit => CODE
 
 Optional. A callback to invoke if the remote perl process exits. Will be
-passed directly to the C<IO::Async::Loop> C<spawn_child> method.
+passed directly to the C<IO::Async::Process> C<on_finish> method.
 
 =back
 
@@ -154,7 +117,10 @@ sub new
 
    my $self = $class->SUPER::new( %args );
 
-   $loop->add( $self ) if $loop;
+   if( $loop ) {
+      warnings::warnif( deprecated => "'loop' constructor argument is deprecated" );
+      $loop->add( $self );
+   }
 
    return $self;
 }
@@ -164,9 +130,10 @@ sub _init
    my $self = shift;
    my ( $params ) = @_;
 
-   foreach (qw( read_handle write_handle Command Host User SshPath Perl )) {
-      $self->{init_args}{$_} = delete $params->{$_} if exists $params->{$_};
-   }
+   # This will delete keys
+   $self->{IPC_PerlSSH_command} = [ $self->build_command_from( $params ) ];
+
+   $self->{message_queue} = [];
 
    return $self->SUPER::_init( $params );
 }
@@ -198,49 +165,26 @@ sub configure
 sub _add_to_loop
 {
    my $self = shift;
-   my $class = ref $self;
-   my ( $loop ) = @_;
-
-   my ( $read_handle, $write_handle );
-
-   my $params = delete $self->{init_args} or return; # Already done it
+   $self->SUPER::_add_to_loop( @_ );
 
    my $on_exit = $self->{on_exit} || sub {
       print STDERR "Remote SSH died early";
    };
 
-   if( $params->{read_handle} and $params->{write_handle} ) {
-      $read_handle  = $params->{read_handle};
-      $write_handle = $params->{write_handle};
-   }
-   else {
-      my @command = $self->build_command( %$params );
-
+   if( my $command = delete $self->{IPC_PerlSSH_command} ) {
       # TODO: IO::Async ought to have nice ways to do this
-      pipe( $read_handle, my $childwr  ) or croak "Unable to pipe() - $!";
-      pipe( my $childrd, $write_handle ) or croak "Unable to pipe() - $!";
-
-      my $pid = $loop->spawn_child(
-         command => \@command,
-         setup => [
-            stdin  => $childrd,
-            stdout => $childwr,
-         ],
-         on_exit => $on_exit,
+      my $process = $self->{process} = IO::Async::Process->new(
+         command => $command,
+         stdio => { via => "pipe_rdwr" },
+         on_finish => $on_exit,
       );
 
-      close( $childrd );
-      close( $childwr );
+      $process->stdio->configure(
+         on_read => $self->_replace_weakself( "on_read" ),
+      );
 
-      $self->{pid} = $pid;
+      $self->add_child( $process );
    }
-
-   $self->{message_queue} = [];
-
-   $self->configure(
-      read_handle  => $read_handle,
-      write_handle => $write_handle,
-   );
 
    $self->send_firmware;
 }
@@ -264,6 +208,12 @@ sub on_read
    $cb->( $message, @args );
 
    return 1;
+}
+
+sub write
+{
+   my $self = shift;
+   $self->{process}->stdio->write( @_ );
 }
 
 sub do_message

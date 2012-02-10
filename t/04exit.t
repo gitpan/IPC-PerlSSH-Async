@@ -50,5 +50,4 @@ wait_for { defined $exception and @exitparams };
 
 is( $result, undef,                         '$result after exit' );
 is( $exception, "Remote connection closed", '$exception after exit' );
-# [0] is PID so a bit unreliable but the other 3 are OK
-is_deeply( [ @exitparams[1..3] ], [ 2<<8, '', '' ], '@exitparams after exit' );
+is( $exitparams[1], 2<<8, '@exitparams after exit' );

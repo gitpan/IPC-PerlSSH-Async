@@ -1,5 +1,5 @@
 NAME
-    "IPC::PerlSSH::Async" - Asynchronous wrapper around IPC::PerlSSH
+    `IPC::PerlSSH::Async' - Asynchronous wrapper around IPC::PerlSSH
 
 SYNOPSIS
     *Note:* the constructor has changed since version 0.03.
@@ -45,53 +45,35 @@ SYNOPSIS
      $loop->loop_forever;
 
 DESCRIPTION
-    This module provides an object class that implements the "IPC::PerlSSH"
+    This module provides an object class that implements the `IPC::PerlSSH'
     behaviour in an asynchronous way, suitable for use in an
-    "IO::Async"-based program.
+    `IO::Async'-based program.
 
-    Briefly, "IPC::PerlSSH" is a module that allows execution of perl code
+    Briefly, `IPC::PerlSSH' is a module that allows execution of perl code
     in a remote perl instance, usually accessed via ssh, with the notable
     distinction that the module does not need to be present in the remote
     end, nor does any special server need to be running, besides ssh itself.
     For more detail, see the IPC::PerlSSH documentation.
 
 INITIAL PARAMETERS
-    In order to specify the type of connection to be used, exactly one of
-    the following sets of keys should be passed to "new":
-
-  SSH Connection
-    Host => STRING
-    User => STRING (optional)
-    SshPath => STRING (optional)
-    Perl => STRING (optional)
-            SSH to the given hostname, as the optionally given username.
-            "SshPath" and "Perl" are optional strings to give the local path
-            to the ssh binary, and the remote path to the remote perl
-            respectively.
-
-  Arbitrary Command
-    Command => STRING|ARRAY
-            A string or ARRAY reference containing arguments to be exec()ed
-
-  Direct IO Handles
-    read_handle => IO
-    write_handle => IO
-            IO handles.
+    As well as the PARAMETERS named below, the constructor will take any of
+    the constructor arguments named by IPC::PerlSSH, to set up the
+    connection.
 
 PARAMETERS
-    The following named parameters may be passed to "new" or "configure":
+    The following named parameters may be passed to `new' or `configure':
 
     on_exception => CODE
-            Optional. A default callback to use if a call to "eval()",
-            "store()" or "call()" does not provide one. If it is changed
+            Optional. A default callback to use if a call to `eval()',
+            `store()' or `call()' does not provide one. If it is changed
             while a result it outstanding, the handler that was in place at
             the time it was invoked will be used in case of errors. Changes
-            will only affect new "eval()", "store()" or "call()" calls made
+            will only affect new `eval()', `store()' or `call()' calls made
             after the change.
 
     on_exit => CODE
             Optional. A callback to invoke if the remote perl process exits.
-            Will be passed directly to the "IO::Async::Loop" "spawn_child"
+            Will be passed directly to the `IO::Async::Process' `on_finish'
             method.
 
 METHODS
@@ -99,7 +81,7 @@ METHODS
     This method evaluates code in the remote host, passing arguments and
     returning the result.
 
-    The %args hash takes the following keys:
+    The `%args' hash takes the following keys:
 
     code => STRING
             The perl code to execute, in a string. (i.e. NOT a CODE
@@ -117,7 +99,7 @@ METHODS
             exception.
 
     The code should be passed in a string, and is evaluated using a string
-    "eval" in the remote host, in list context. If this method is called in
+    `eval' in the remote host, in list context. If this method is called in
     scalar context, then only the first element of the returned list is
     returned. Only string scalar values are supported in either the
     arguments or the return values; no deeply-nested structures can be
@@ -135,7 +117,7 @@ METHODS
     This method sends code to the remote host to store in a named procedure
     which can be executed later.
 
-    The %args hash takes the following keys:
+    The `%args' hash takes the following keys:
 
     name => STRING
             A name for the stored procedure.
@@ -152,19 +134,19 @@ METHODS
             exception.
 
     The code should be passed in a string, along with a name which can later
-    be called by the "call" method.
+    be called by the `call' method.
 
     While the code is not executed, it will still be compiled into a CODE
     reference in the remote host. Any compile errors that occur will still
-    invoke the "on_exception" continuation. If the remote process exits
+    invoke the `on_exception' continuation. If the remote process exits
     before responding, this will be propagated as an exception.
 
   $ips->call( %args )
     This method invokes a stored procedure that has earlier been defined
-    using the "store" method. The arguments are passed and the result is
-    returned in the same way as with the "eval" method.
+    using the `store' method. The arguments are passed and the result is
+    returned in the same way as with the `eval' method.
 
-    The %params hash takes the following keys:
+    The `%params' hash takes the following keys:
 
     name => STRING
             The name of the stored procedure.
@@ -182,9 +164,9 @@ METHODS
 
   $ips->use_library( %args )
     This method loads a library of code from a module, and stores them to
-    the remote perl by calling "store" on each one.
+    the remote perl by calling `store' on each one.
 
-    The %params hash takes the following keys:
+    The `%params' hash takes the following keys:
 
     library => STRING
             Name of the library to load
@@ -201,10 +183,10 @@ METHODS
             exception or exits.
 
     The library name may be a full class name, or a name within the
-    "IPC::PerlSSH::Library::" space.
+    `IPC::PerlSSH::Library::' space.
 
     If the funcs list is non-empty, then only those named functions are
-    stored (analogous to the "use" perl statement). This may be useful in
+    stored (analogous to the `use' perl statement). This may be useful in
     large libraries that define many functions, only a few of which are
     actually used.
 

@@ -15,3 +15,4 @@ t/04exit.t
 t/10library-load.t
 t/99pod.t
 t/Math.pm
+META.json
